@@ -1,0 +1,15 @@
+{% extends "bootstrap/base.html" %}
+
+{% block content %}
+  <div class="container">
+    <h2>Upload Student Submissions</h2>
+    <form method="POST" enctype="multipart/form-data">
+      {{ form.hidden_tag() }}
+      <div class="form-group">
+        {{ form.submissions.label }}
+        {{ form.submissions() }}
+      </div>
+      {{ form.upload(class="btn btn-primary") }}
+    </form>
+  </div>
+{% endblock %}
