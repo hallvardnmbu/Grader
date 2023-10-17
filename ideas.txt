@@ -1,0 +1,22 @@
+Nettside
+--------
+* mulighet for å gå frem og tilbake
+* historie/husk tidliger svar etc.
+* bedre utdelende
+* løsningsforslag-opplasting
+* bedre filopplastnings-utseende
+* bedre input-bokser
+	- alle trenger ikke være "obligatoriske"
+
+Vurdering
+---------
+* bedre håndtering av elevbesvarelser
+	- håndtere navn
+	- fast "mal"
+	- kutt ut unødvendige linjer
+* bedre prompts
+
+Diverse
+-------
+* automatiske tester av koden først?
+* bygge om til applikasjon i stedet
