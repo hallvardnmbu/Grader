@@ -3,21 +3,23 @@
 {% block content %}
   <div class="container">
     <h2>Grading: {{ filename }}</h2>
-    <div class="row">
-        <div class="col-md-6">
-            <h4>Original Code</h4>
-            <pre>{{ code }}</pre>
-        </div>
-        <div class="col-md-6">
-            <h4>Feedback & Improvements</h4>
-            <pre>{{ feedback }}</pre>
-            <pre>{{ improvements }}</pre>
-        </div>
+
+    <!-- Submission Block -->
+    <div>
+        <h4>Submission:</h4>
+        <pre>{{ code }}</pre>
     </div>
+
+    <!-- Feedback Block -->
+    <div>
+        <h4>Feedback:</h4>
+        <pre>{{ feedback }}</pre>
+    </div>
+
     <form method="POST">
-        <button type="submit" name="action" value="prev" class="btn btn-secondary" {% if session['current_index'] == 0 %} disabled {% endif %}>Previous Submission</button>
-        <span class="mx-3">Submission {{ session['current_index'] + 1 }} of {{ total_submissions }}</span>
-        <button type="submit" name="action" value="next" class="btn btn-primary">Next Submission</button>
+        <button type="submit" name="action" value="prev" class="btn btn-secondary" {% if session['index'] == 0 %} disabled {% endif %}>Previous Submission</button>
+        <span class="mx-3">Submission {{ session['index'] + 1 }} of {{ total }}</span>
+        <button type="submit" name="action" value="next" class="btn btn-primary" {% if session['index'] == total - 1 %} disabled {% endif %}>Next Submission</button>
     </form>
   </div>
 {% endblock %}

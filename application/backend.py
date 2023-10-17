@@ -8,11 +8,12 @@ from flask_wtf import FlaskForm
 from wtforms import TextAreaField, StringField, SubmitField, FileField
 from wtforms.validators import DataRequired
 from wtforms.widgets import FileInput
+from werkzeug.utils import secure_filename
 
 
 UPLOAD_FOLDER = 'uploads'
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="./static")
 app.config['SECRET_KEY'] = open("../__secrets/flask", "r").read()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 Bootstrap(app)
@@ -20,83 +21,93 @@ Bootstrap(app)
 openai.api_key = open("../__secrets/openai", "r").read()
 
 
-class TaskInputForm(FlaskForm):
-    task_description = TextAreaField('Task Description', validators=[DataRequired()])
-    key_points = StringField('Key Points (comma-separated)', validators=[DataRequired()])
-    submit = SubmitField('Next')
-
-
-class MultiFileInput(FileInput):
+class Multifile(FileInput):
+    """Handles multiple file uploads."""
     input_type = 'file'
 
     def __call__(self, field, **kwargs):
+        """Override the default behavior to allow multiple files."""
         kwargs.setdefault('multiple', True)
-        return super(MultiFileInput, self).__call__(field, **kwargs)
+        return super(Multifile, self).__call__(field, **kwargs)
 
 
-class UploadForm(FlaskForm):
-    submissions = FileField('Upload Student Submissions', validators=[DataRequired()], widget=MultiFileInput())
-    upload = SubmitField('Upload & Grade')
+class GradingForm(FlaskForm):
+    """Form for inputting the assignment description and uploading submissions."""
+    description = TextAreaField('Assignment description:',
+                                validators=[DataRequired()], render_kw={"rows": 8})
+    focus = StringField('Main focus:')
+    submissions = FileField('Submissions to grade',
+                            validators=[DataRequired()], widget=Multifile())
+    grade = SubmitField('Grade')
 
 
 @app.route('/', methods=['GET', 'POST'])
-def index():
-    form = TaskInputForm()
-    if form.validate_on_submit():
-        session['task_description'] = form.task_description.data
-        session['key_points'] = form.key_points.data.split(',')
-        return redirect(url_for('upload'))
-    return render_template('task.html', form=form)
+def assignment():
+    """Route for uploading the assignment description and student submissions."""
+    task = GradingForm()
 
+    if task.validate_on_submit():
+        session['assignment'] = task.description.data
+        session['focus'] = task.focus.data
 
-@app.route('/upload', methods=['GET', 'POST'])
-def upload():
-    form = UploadForm()
-    if form.validate_on_submit():
-        uploaded_files = request.files.getlist('submissions')
-        for file in uploaded_files:
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        # Remove old files from disk.
+        for file in os.listdir(app.config['UPLOAD_FOLDER']):
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], file))
+
+        # Save new files to disk.
+        for file in request.files.getlist('submissions'):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
-        session['uploaded_files'] = [file.filename for file in uploaded_files]
-        session['current_index'] = 0
+
         return redirect(url_for('grade'))
-    return render_template('upload.html', form=form)
+    return render_template('assignment.html', task=task)
 
 
 @app.route('/grade', methods=['GET', 'POST'])
 def grade():
-    if 'uploaded_files' not in session or session['current_index'] >= len(session['uploaded_files']):
-        return redirect(url_for('index'))
+    files = sorted(os.listdir(app.config['UPLOAD_FOLDER']))
+
+    if not files:
+        return redirect(url_for('assignment'))
 
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == "next":
-            session['current_index'] += 1
-        elif action == "prev" and session['current_index'] > 0:
-            session['current_index'] -= 1
+
+        if action == "next" and session['index'] < len(files) - 1:
+            session['index'] += 1
+        elif action == "prev" and session['index'] > 0:
+            session['index'] -= 1
+
         return redirect(url_for('grade'))
 
-    current_file = session['uploaded_files'][session['current_index']]
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], current_file)
+    file = files[session['index']]
+    path = os.path.join(app.config['UPLOAD_FOLDER'], file)
 
-    with open(file_path, 'r') as f:
+    with open(path, 'r') as f:
         code = f.read()
 
-    feedback, improvement_points = grade_gpt(session['task_description'], session['key_points'], code)
+    feedback = gpt(session['assignment'], session['focus'], code)
 
-    return render_template('grade.html', filename=current_file, code=code, feedback=feedback, improvements=improvement_points, total_submissions=len(session['uploaded_files']))
+    return render_template('grade.html',
+                           filename=file, code=code, total=len(files),
+                           feedback=feedback)
 
 
-def grade_gpt(task_description, key_points, student_code):
-    prompt = f"Evaluate the following student submission based on the task: '{task_description}' and key points: {', '.join(key_points)}.\n\n---\n\n{student_code}\n\n---\n\nFeedback: "
-    response = openai.Completion.create(engine="davinci", prompt=prompt, max_tokens=150)
-    feedback = response.choices[0].text.strip()
+def gpt(task, focus, code):
+    prompt = (f"Evaluate the following student submission based on the task: \n\n"
+              f"{task} \n\n"
+              f"where the main focus is: \n\n"
+              f"{focus}. \n\n"
+              f"Evaluate their code and assess whether they have satisfied the task and main "
+              f"focus of the exercies based on their submission:"
+              f"\n\n---\n\n {code} \n\n---\n\n"
+              f"Feedback:")
+    # response = openai.Completion.create(engine="davinci", prompt=prompt, max_tokens=150)
+    # feedback = response.choices[0].text.strip()
+    feedback = "This is a test feedback"
 
-    improvement_prompt = f"Suggest improvements for the following student submission based on the task: '{task_description}' and key points: {', '.join(key_points)}.\n\n---\n\n{student_code}\n\n---\n\nImprovements: "
-    improvement_response = openai.Completion.create(engine="davinci", prompt=improvement_prompt, max_tokens=150)
-    improvement_points = improvement_response.choices[0].text.strip()
-
-    return feedback, improvement_points
+    return feedback
 
 
 if __name__ == "__main__":
