@@ -3,11 +3,19 @@
 {% block content %}
   <div class="container">
     <h2>Grading: {{ filename }}</h2>
-
     <!-- Submission Block -->
     <div>
         <h4>Submission:</h4>
-        <pre>{{ code }}</pre>
+        <pre>
+            {% for line in code.split("\n") %}
+                {%- if loop.index in errors %}
+                    <span class="highlight-error">{{ line.strip() }} <span class="error-message">{{
+                            errors[loop.index] }}</span></span>
+                {%- else %}
+                    {{ line.strip() }}
+                {%- endif %}<br>
+            {%- endfor %}
+        </pre>
     </div>
 
     <!-- Feedback Block -->

@@ -1,6 +1,9 @@
 """Framework for grading student submissions."""
 
 import os
+import re
+from itertools import takewhile
+
 import openai
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_bootstrap import Bootstrap
@@ -9,6 +12,9 @@ from wtforms import TextAreaField, StringField, SubmitField, FileField
 from wtforms.validators import DataRequired
 from wtforms.widgets import FileInput
 from werkzeug.utils import secure_filename
+from pygments import highlight
+from pygments.lexers import PythonLexer
+from pygments.formatters import HtmlFormatter
 
 
 UPLOAD_FOLDER = 'uploads'
@@ -16,6 +22,7 @@ UPLOAD_FOLDER = 'uploads'
 app = Flask(__name__, static_folder="./static")
 app.config['SECRET_KEY'] = open("../__secrets/flask", "r").read()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['GRADED'] = {}
 Bootstrap(app)
 
 openai.api_key = open("../__secrets/openai", "r").read()
@@ -35,7 +42,7 @@ class GradingForm(FlaskForm):
     """Form for inputting the assignment description and uploading submissions."""
     description = TextAreaField('Assignment description:',
                                 validators=[DataRequired()], render_kw={"rows": 8})
-    focus = StringField('Main focus:')
+    focus = StringField('Main focus when grading:')
     submissions = FileField('Submissions to grade',
                             validators=[DataRequired()], widget=Multifile())
     grade = SubmitField('Grade')
@@ -87,11 +94,21 @@ def grade():
     with open(path, 'r') as f:
         code = f.read()
 
-    feedback = gpt(session['assignment'], session['focus'], code)
+    name = email = "Unknown"
+    for line in code:
+        if line.startswith("# Name:"):
+            name = line.split(":")[1].strip()
+        elif line.startswith("# Email:"):
+            email = line.split(":")[1].strip()
+
+    feedback, errors = gpt(session['assignment'], session['focus'], code)
+
+    app.config['GRADED'].setdefault("-".join([name, email]), []).append({"code": code,
+                                                                         "feedback": feedback})
 
     return render_template('grade.html',
                            filename=file, code=code, total=len(files),
-                           feedback=feedback)
+                           feedback=feedback, errors=errors)
 
 
 def gpt(task, focus, code):
@@ -102,15 +119,24 @@ def gpt(task, focus, code):
               f"Evaluate their code and assess whether they have satisfied the task and main "
               f"focus of the exercies based on their submission:"
               f"\n\n---\n\n {code} \n\n---\n\n"
-              f"Feedback:")
+              f"Your response should start with error highlights of the format 'X: Y', "
+              f"where X is the line number of the error and Y the (short description of the) "
+              f"error. Provide general feedback on the submission below this, after an empty line.")
     # response = openai.Completion.create(engine="davinci", prompt=prompt, max_tokens=150)
     # feedback = response.choices[0].text.strip()
-    feedback = "This is a test feedback"
 
-    return feedback
+    feedback = "1: Her er det noe feil?\n4: Her og!\n\nThis is some general feedback."
+
+    errors = {}
+    for line in takewhile(lambda x: x.strip() != '', feedback.split("\n")):
+        match = re.match(r"^(\d+):\s*(.*)", line)
+        if match:
+            idx, error = match.groups()
+            errors[int(idx)] = error.strip()
+
+    return feedback, errors
 
 
 if __name__ == "__main__":
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     app.run(debug=True)
