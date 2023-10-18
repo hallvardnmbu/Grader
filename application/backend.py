@@ -5,16 +5,13 @@ import re
 from itertools import takewhile
 
 import openai
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, session
 from flask_bootstrap import Bootstrap
 from flask_wtf import FlaskForm
 from wtforms import TextAreaField, StringField, SubmitField, FileField
 from wtforms.validators import DataRequired
 from wtforms.widgets import FileInput
 from werkzeug.utils import secure_filename
-from pygments import highlight
-from pygments.lexers import PythonLexer
-from pygments.formatters import HtmlFormatter
 
 
 UPLOAD_FOLDER = 'uploads'
@@ -113,12 +110,12 @@ def grade():
 
 def gpt(task, focus, code):
     prompt = (f"Evaluate the following student submission based on the task: \n\n"
-              f"{task} \n\n"
+              f"\n\n---\n\n{task} \n\n---\n\n"
               f"where the main focus is: \n\n"
               f"{focus}. \n\n"
               f"Evaluate their code and assess whether they have satisfied the task and main "
-              f"focus of the exercies based on their submission:"
-              f"\n\n---\n\n {code} \n\n---\n\n"
+              f"focus of the exercise based on their submission:"
+              f"\n\n---\n\n{code} \n\n---\n\n"
               f"Your response should start with error highlights of the format 'X: Y', "
               f"where X is the line number of the error and Y the (short description of the) "
               f"error. Provide general feedback on the submission below this, after an empty line.")
