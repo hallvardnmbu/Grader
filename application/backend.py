@@ -4,7 +4,6 @@ import os
 import re
 from itertools import takewhile
 
-import openai
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_bootstrap import Bootstrap
 from flask_wtf import FlaskForm
@@ -13,7 +12,11 @@ from wtforms.validators import DataRequired
 from wtforms.widgets import FileInput
 from werkzeug.utils import secure_filename
 
+from application.transformer import get_model, evaluate
 
+
+HUGGINGFACE_TOKEN = open("../__secrets/huggingface", "r").read() if os.path.exists("../__secrets/huggingface") else None
+MODEL = get_model('meta-llama/Meta-Llama-3-8B', token=HUGGINGFACE_TOKEN)
 UPLOAD_FOLDER = 'uploads'
 
 app = Flask(__name__, static_folder="./static")
@@ -21,8 +24,6 @@ app.config['SECRET_KEY'] = open("../__secrets/flask", "r").read()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['GRADED'] = {}
 Bootstrap(app)
-
-openai.api_key = open("../__secrets/openai", "r").read()
 
 
 class Multifile(FileInput):
@@ -53,6 +54,7 @@ def assignment():
     if task.validate_on_submit():
         session['assignment'] = task.description.data
         session['focus'] = task.focus.data
+        session['index'] = 0
 
         # Remove old files from disk.
         for file in os.listdir(app.config['UPLOAD_FOLDER']):
@@ -98,7 +100,7 @@ def grade():
         elif line.startswith("# Email:"):
             email = line.split(":")[1].strip()
 
-    feedback, errors = gpt(session['assignment'], session['focus'], code)
+    feedback, errors = generate(session['assignment'], session['focus'], code)
 
     app.config['GRADED'].setdefault("-".join([name, email]), []).append({"code": code,
                                                                          "feedback": feedback})
@@ -108,7 +110,9 @@ def grade():
                            feedback=feedback, errors=errors)
 
 
-def gpt(task, focus, code):
+def generate(task, focus, code):
+    global MODEL
+
     prompt = (f"Evaluate the following student submission based on the task: \n\n"
               f"\n\n---\n\n{task} \n\n---\n\n"
               f"where the main focus is: \n\n"
@@ -119,10 +123,7 @@ def gpt(task, focus, code):
               f"Your response should start with error highlights of the format 'X: Y', "
               f"where X is the line number of the error and Y the (short description of the) "
               f"error. Provide general feedback on the submission below this, after an empty line.")
-    # response = openai.Completion.create(engine="davinci", prompt=prompt, max_tokens=150)
-    # feedback = response.choices[0].text.strip()
-
-    feedback = "1: Her er det noe feil?\n4: Her og!\n\nThis is some general feedback."
+    feedback = evaluate(MODEL, prompt, generate=2000)
 
     errors = {}
     for line in takewhile(lambda x: x.strip() != '', feedback.split("\n")):

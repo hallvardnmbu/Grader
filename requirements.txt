@@ -1,4 +1,6 @@
-openai
+transformers
 flask
+flask_bootstrap
+flask_wtf
 wtforms
 werkzeug

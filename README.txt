@@ -1,8 +1,10 @@
-AutoGrading
-===========
+agrade
+------
 
-Web application for automatic grading of programming assignments by using OpenAI API (ChatGPT). The
-student's submissions are then highligted with comments based on the API's response.
+Web application for automatic grading of programming assignments by using pretrained language model
+of choice. The student's submissions are then highligted with comments based on the AI's response.
+
+Default model: "meta-llama/Meta-Llama-3-8B"
 
 Future
 ------
@@ -10,4 +12,3 @@ Future
 * Improve the UI
 * Desktop application
 * Automatic code testing (unit tests, flake8, etc.)
-* Move away from ChatGPT to a cheaper/local solution
